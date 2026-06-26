@@ -102,12 +102,22 @@ function applyRecurrenceDateAndTimezone(originalDate: Date, currentDate: Date, t
   return adjustedMoment.toDate();
 }
 
+function getOccurrenceCalendarDay(recurrenceDate: Date, eventStart: Date, tzid: string): string {
+  const occurrenceStart = applyRecurrenceDateAndTimezone(eventStart, recurrenceDate, tzid);
+  return tz(occurrenceStart, tzid).format('YYYY-MM-DD');
+}
+
 function formatDayInTimezone(date: Date | moment.Moment, tzid: string): string {
   return tz(date, tzid).format('YYYY-MM-DD');
 }
 
-function isExcluded(recurrenceDate: Date, exdateArray: Date[], tzid: string): boolean {
-  const recurrenceDay = formatDayInTimezone(recurrenceDate, tzid);
+function isExcluded(
+  recurrenceDate: Date,
+  eventStart: Date,
+  exdateArray: Date[],
+  tzid: string,
+): boolean {
+  const recurrenceDay = getOccurrenceCalendarDay(recurrenceDate, eventStart, tzid);
   return exdateArray.some(exDate =>
     formatDayInTimezone(exDate, tzid) === recurrenceDay
   );
@@ -148,7 +158,7 @@ function processRecurringRules(event: any, sortedDaysToMatch: string[], excluded
   recurrenceDates.forEach(recurrenceDate => {
     const recurrenceMoment = tz(recurrenceDate, tzid);
 
-    if (isExcluded(recurrenceDate, excludedDates, tzid)) {
+    if (isExcluded(recurrenceDate, event.start, excludedDates, tzid)) {
       console.debug(`Skipping excluded recurrence: ${event.summary} on ${recurrenceMoment.format('YYYY-MM-DD')}`);
       return;
     }
