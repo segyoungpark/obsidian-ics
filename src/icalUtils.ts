@@ -102,11 +102,18 @@ function applyRecurrenceDateAndTimezone(originalDate: Date, currentDate: Date, t
   return adjustedMoment.toDate();
 }
 
-function isExcluded(recurrenceDate: moment.Moment, exdateArray: moment.Moment[]): boolean {
-  return exdateArray.some(exDate => exDate.isSame(recurrenceDate, 'day'));
+function formatDayInTimezone(date: Date | moment.Moment, tzid: string): string {
+  return tz(date, tzid).format('YYYY-MM-DD');
 }
 
-function processRecurrenceOverrides(event: any, sortedDaysToMatch: string[], excludedDates: moment.Moment[], matchingEvents: any[]) {
+function isExcluded(recurrenceDate: Date, exdateArray: Date[], tzid: string): boolean {
+  const recurrenceDay = formatDayInTimezone(recurrenceDate, tzid);
+  return exdateArray.some(exDate =>
+    formatDayInTimezone(exDate, tzid) === recurrenceDay
+  );
+}
+
+function processRecurrenceOverrides(event: any, sortedDaysToMatch: string[], excludedDates: Date[], matchingEvents: any[]) {
   for (const date in event.recurrences) {
     const recurrence = event.recurrences[date];
     const recurrenceMoment = moment(date).startOf('day');
@@ -128,7 +135,7 @@ function processRecurrenceOverrides(event: any, sortedDaysToMatch: string[], exc
   }
 }
 
-function processRecurringRules(event: any, sortedDaysToMatch: string[], excludedDates: moment.Moment[], matchingEvents: any[]) {
+function processRecurringRules(event: any, sortedDaysToMatch: string[], excludedDates: Date[], matchingEvents: any[]) {
   const tzid = event.rrule.origOptions.tzid || 'UTC';
 
   // Use UTC for rrule calculations to avoid timezone offset issues
@@ -139,9 +146,9 @@ function processRecurringRules(event: any, sortedDaysToMatch: string[], excluded
   const recurrenceDates = event.rrule.between(startOfRange, endOfRange, true);
 
   recurrenceDates.forEach(recurrenceDate => {
-    const recurrenceMoment = tz(recurrenceDate, tzid).startOf('day');
+    const recurrenceMoment = tz(recurrenceDate, tzid);
 
-    if (isExcluded(recurrenceMoment, excludedDates)) {
+    if (isExcluded(recurrenceDate, excludedDates, tzid)) {
       console.debug(`Skipping excluded recurrence: ${event.summary} on ${recurrenceMoment.format('YYYY-MM-DD')}`);
       return;
     }
@@ -159,7 +166,7 @@ function processRecurringRules(event: any, sortedDaysToMatch: string[], excluded
     const eventStartDate = eventStartMoment.format('YYYY-MM-DD');
     if (sortedDaysToMatch.includes(eventStartDate)) {
       console.debug(`Adding recurring event: ${clonedEvent.summary} ${clonedEvent.start} - ${clonedEvent.end}`);
-      console.debug("Excluded dates:", excludedDates.map(date => date.format('YYYY-MM-DD')));
+      console.debug("Excluded dates:", excludedDates.map(date => formatDayInTimezone(date, tzid)));
 
       console.debug(clonedEvent);
       clonedEvent.eventType = "recurring";
@@ -200,18 +207,16 @@ export function filterMatchingEvents(icsArray: any[], daysToMatch: string[], sho
       return matchingEvents;
     }
 
-    // Populate excluded dates from exdates and recurrence overrides
-    const excludedDates = [
+    // Populate excluded dates from exdates and recurrence overrides.
+    // Keep original datetimes; compare calendar days in the event timezone.
+    const excludedDates: Date[] = [
       ...(event.exdate
-        ? Object.keys(event.exdate).map(key => {
-          const date = tz(event.exdate[key], event.exdate[key].tz || 'UTC');
-          return date.startOf('day');
-        })
+        ? Object.keys(event.exdate).map(key => event.exdate[key] as Date)
         : []),
 
       // Add overridden dates from recurrences
       ...(event.recurrences
-        ? Object.keys(event.recurrences).map(key => moment(key).startOf('day'))
+        ? Object.keys(event.recurrences).map(key => moment(key).toDate())
         : [])
     ];
 

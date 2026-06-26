@@ -261,6 +261,35 @@ END:VCALENDAR`;
       expect(results[2]).toHaveLength(0); // Excluded
       expect(results[3]).toHaveLength(1); // Should appear
     });
+
+    it('should exclude Apple Calendar EXDATE when UTC day differs from event local day', () => {
+      // Apple stores EXDATE in UTC; the excluded occurrence may fall on the next
+      // local calendar day. Comparing startOf('day') in mixed timezones misses this.
+      const icsContent = `BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Apple//NONSGML iCal 5.0//EN
+BEGIN:VEVENT
+SUMMARY:Morning standup
+DTSTART;TZID=Asia/Seoul:20260619T020000
+DTEND;TZID=Asia/Seoul:20260619T030000
+RRULE:FREQ=DAILY;COUNT=5
+EXDATE:20260619T170000Z
+UID:apple-exdate-test
+END:VEVENT
+END:VCALENDAR`;
+
+      const events = parseIcs(icsContent);
+      expect(events).toHaveLength(1);
+
+      // EXDATE 2026-06-19T17:00Z = 2026-06-20 02:00 KST — the June 20 occurrence
+      const excludedDay = filterMatchingEvents(events, ['2026-06-20'], false);
+      expect(excludedDay).toHaveLength(0);
+
+      // Adjacent days should still appear
+      const adjacentDay = filterMatchingEvents(events, ['2026-06-19'], false);
+      expect(adjacentDay).toHaveLength(1);
+      expect(adjacentDay[0].summary).toBe('Morning standup');
+    });
   });
 
 
